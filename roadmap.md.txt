@@ -1,0 +1,20 @@
+# Skjoldr Roadmap
+
+## Upcoming Features
+- Outbound allowlist editor
+- Config import/export
+- Per-profile toggles
+- Log viewer with filters
+- Optional toast notifications
+- Silent mode for sysadmin deployment
+
+## Long-Term Ideas
+- EXE wrapper for GUI
+- MSI installer
+- Event log integration
+- Network profile auto-switching
+
+## Completed
+- v1.0.0 core modes
+- v1.0.0 GUI shell
+- v1.0.1 documentation cleanup

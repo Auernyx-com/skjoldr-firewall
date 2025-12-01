@@ -1,0 +1,15 @@
+# Changelog
+
+## v1.0.1 - Documentation & Structure Update
+- Rebuilt README.md for clarity and professionalism
+- Added roadmap.md
+- Added changelog.md
+- Cleaned project folder layout
+- No functional changes to firewall engine
+- GUI unchanged
+
+## v1.0.0 - Initial Release
+- Added Conservative Mode
+- Added Fortress Mode
+- Added Reset to Defaults
+- Added Skjoldr GUI

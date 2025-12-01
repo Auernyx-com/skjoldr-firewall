@@ -61,4 +61,14 @@ function Show-FirewallProfileStatus {
     Write-Host "=== Firewall Profile Status ===" -ForegroundColor Cyan
     Get-NetFirewallProfile | Format-Table Name, Enabled, DefaultInboundAction, DefaultOutboundAction
 }
-###################################################
+
+# === Skjoldr GUI compatibility wrappers ===
+
+function Apply-ConservativeMode {
+    Set-ConservativeFirewall
+}
+
+function Apply-FortressMode {
+    Set-FortressFirewall
+}
+
