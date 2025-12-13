@@ -1,263 +1,203 @@
-# =================================================
-# SKJOLDR v1.0 — First-born of Aurenyx
-# FINAL | RUNS | NO EXCUSES | AEsir-aligned
-# =================================================
+# SkjoldrGUI.ps1
+# WinForms GUI for Skjoldr core.
+# GUI does NOT implement firewall logic. It only calls functions from SkjoldrFirewall.ps1.
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+function Test-Admin {
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $p  = New-Object Security.Principal.WindowsPrincipal($id)
+    return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Relaunch-AsAdmin {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "powershell.exe"
+    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    $psi.Verb = "runas"
+    try {
+        [System.Diagnostics.Process]::Start($psi) | Out-Null
+        exit
+    } catch {
+        throw "Skjoldr GUI requires admin rights. Relaunch cancelled."
+    }
+}
+
+# Resolve folder reliably even when launched weirdly
+$baseDir = if ($PSScriptRoot -and $PSScriptRoot.Trim().Length -gt 0) { $PSScriptRoot } else { (Get-Location).Path }
+$corePath = Join-Path $baseDir "SkjoldrFirewall.ps1"
+
+if (-not (Test-Path -LiteralPath $corePath)) {
+    throw "Core file not found: $corePath"
+}
+
+# Require admin
+if (-not (Test-Admin)) { Relaunch-AsAdmin }
+
+# Load core
+. $corePath
+
+# Verify core functions exist
+$required = @("Apply-ConservativeMode","Apply-FortressMode","Reset-SkjoldrFirewall","Get-SkjoldrStatus")
+$missing = @()
+foreach ($fn in $required) {
+    if (-not (Get-Command $fn -ErrorAction SilentlyContinue)) { $missing += $fn }
+}
+if ($missing.Count -gt 0) {
+    throw "Missing core functions: " + ($missing -join ", ")
+}
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-[System.Windows.Forms.Application]::EnableVisualStyles()
-
-function Hex([string]$h) { [System.Drawing.ColorTranslator]::FromHtml($h) }
-
-# Admin check — must be elevated
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
-    [Security.Principal.WindowsBuiltInRole]::Administrator
-)) {
-    [System.Windows.Forms.MessageBox]::Show(
-        "Skjoldr demands elevation.`nRun as Administrator.",
-        "Aurenyx - Access Denied",
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Error
-    ) | Out-Null
-    exit
-}
-
-# Core import
-$core = Join-Path $PSScriptRoot "SkjoldrFirewall.ps1"
-if (-not (Test-Path $core)) {
-    [System.Windows.Forms.MessageBox]::Show(
-        "SkjoldrFirewall.ps1 not found in script directory.",
-        "Aurenyx - Core Missing",
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Error
-    ) | Out-Null
-    exit
-}
-. $core
-
-# Form
+# ---------- UI ----------
 $form = New-Object System.Windows.Forms.Form
-$form.Text            = "Skjoldr - First-born of Aurenyx"
-$form.Size            = New-Object System.Drawing.Size(780, 590)
-$form.StartPosition   = "CenterScreen"
-$form.FormBorderStyle = "FixedSingle"
-$form.MaximizeBox     = $false
-$form.BackColor       = Hex "#141418"
+$form.Text = "Skjoldr Firewall"
+$form.StartPosition = "CenterScreen"
+$form.Size = New-Object System.Drawing.Size(860, 600)
+$form.MaximizeBox = $false
+$form.FormBorderStyle = "FixedDialog"
 
-# Header label
-$header = New-Object System.Windows.Forms.Label
-$header.Location      = New-Object System.Drawing.Point(20, 15)
-$header.Text          = "SKJOLDR"
-$header.ForeColor     = Hex "#E6DCC8"
-$header.Font          = New-Object System.Drawing.Font(
-    "Segoe UI Semibold",
-    14,
-    [System.Drawing.FontStyle]::Bold
-)
-$header.AutoSize      = $true
+# Dark theme
+$form.BackColor = [System.Drawing.Color]::FromArgb(30,30,30)
+$form.ForeColor = [System.Drawing.Color]::Gainsboro
 
-# Subtitle
-$sub = New-Object System.Windows.Forms.Label
-$sub.Location         = New-Object System.Drawing.Point(20, 42)
-$sub.Text             = "First-born shield of Aurenyx. Choose your stance."
-$sub.ForeColor        = Hex "#B4B4B4"
-$sub.AutoSize         = $true
 
-# Mode indicator
-$mode = New-Object System.Windows.Forms.Label
-$mode.Location        = New-Object System.Drawing.Point(20, 68)
-$mode.Text            = "Active Shield: Detecting..."
-$mode.Font            = New-Object System.Drawing.Font("Segoe UI Semibold", 11)
-$mode.AutoSize        = $true
+$font = New-Object System.Drawing.Font("Segoe UI", 10)
 
-# Log window
-$log = New-Object System.Windows.Forms.TextBox
-$log.Location         = New-Object System.Drawing.Point(20, 100)
-$log.Size             = New-Object System.Drawing.Size(720, 340)
-$log.Multiline        = $true
-$log.ReadOnly         = $true
-$log.ScrollBars       = "Vertical"
-$log.Font             = New-Object System.Drawing.Font("Consolas", 10)
-$log.BackColor        = Hex "#0C0C0E"
-$log.ForeColor        = Hex "#CDEBCD"
-$log.BorderStyle      = "FixedSingle"
+$lbl = New-Object System.Windows.Forms.Label
+$lbl.Text = "Skjoldr (Core-controlled). Buttons call core functions only."
+$lbl.AutoSize = $true
+$lbl.Location = New-Object System.Drawing.Point(16, 16)
+$lbl.Font = $font
+$form.Controls.Add($lbl)
 
-# Footer
-$footer = New-Object System.Windows.Forms.Label
-$footer.Location      = New-Object System.Drawing.Point(20, 540)
-$footer.Text          = "Aurenyx · Skjoldr v1.0 - First-born · AEsir lineage"
-$footer.ForeColor     = Hex "#828296"
-$footer.Font          = New-Object System.Drawing.Font("Segoe UI", 8)
-$footer.AutoSize      = $true
+$btnCon = New-Object System.Windows.Forms.Button
+$btnCon.Text = "Conservative (Inbound Block / Outbound Allow)"
+$btnCon.Size = New-Object System.Drawing.Size(380, 40)
+$btnCon.Location = New-Object System.Drawing.Point(16, 50)
+$btnCon.Font = $font
+$form.Controls.Add($btnCon)
 
-# Buttons layout
-[int]$x   = 20
-[int]$gap = 12
-[int]$w   = 160
-[int]$h   = 46
-[int]$y   = 460
+$btnFor = New-Object System.Windows.Forms.Button
+$btnFor.Text = "Fortress (Inbound+Outbound Block + minimal allows)"
+$btnFor.Size = New-Object System.Drawing.Size(380, 40)
+$btnFor.Location = New-Object System.Drawing.Point(16, 98)
+$btnFor.Font = $font
+$form.Controls.Add($btnFor)
 
-$btnFont = New-Object System.Drawing.Font(
-    "Segoe UI",
-    10,
-    [System.Drawing.FontStyle]::Bold
-)
-
-# Conservative button
-$btnCons = New-Object System.Windows.Forms.Button
-$btnCons.Location     = New-Object System.Drawing.Point([int]$x, [int]$y)
-$btnCons.Size         = New-Object System.Drawing.Size($w, $h)
-$btnCons.Text         = "Conservative"
-$btnCons.BackColor    = Hex "#286028"
-$btnCons.ForeColor    = "White"
-$btnCons.Font         = $btnFont
-
-# Fortress button
-$btnFort = New-Object System.Windows.Forms.Button
-$btnFort.Location     = New-Object System.Drawing.Point(
-    [int]($x + $w + $gap),
-    [int]$y
-)
-$btnFort.Size         = New-Object System.Drawing.Size($w, $h)
-$btnFort.Text         = "FORTRESS"
-$btnFort.BackColor    = Hex "#902020"
-$btnFort.ForeColor    = "White"
-$btnFort.Font         = $btnFont
-
-# Reset button
 $btnReset = New-Object System.Windows.Forms.Button
-$btnReset.Location    = New-Object System.Drawing.Point(
-    [int]($x + 2 * ($w + $gap)),
-    [int]$y
-)
-$btnReset.Size        = New-Object System.Drawing.Size($w, $h)
-$btnReset.Text        = "Reset All"
-$btnReset.BackColor   = Hex "#484848"
-$btnReset.ForeColor   = "White"
-$btnReset.Font        = $btnFont
-
-# Refresh button
-$btnRefresh = New-Object System.Windows.Forms.Button
-$btnRefresh.Location  = New-Object System.Drawing.Point(
-    [int]($x + 3 * ($w + $gap)),
-    [int]$y
-)
-$btnRefresh.Size      = New-Object System.Drawing.Size($w, $h)
-$btnRefresh.Text      = "Refresh"
-$btnRefresh.BackColor = Hex "#282868"
-$btnRefresh.ForeColor = "White"
-$btnRefresh.Font      = $btnFont
-
-# Logging helpers
-function Log-Skjoldr([string]$msg) {
-    $t = (Get-Date).ToString("HH:mm:ss")
-    $log.AppendText("[$t] $msg`r`n")
-    $log.SelectionStart = $log.Text.Length
-    $log.ScrollToCaret()
-}
-
-function Show-Profiles {
-    Log-Skjoldr "=== Shield State ==="
-    Get-NetFirewallProfile | ForEach-Object {
-        $s = if ($_.Enabled) { "ON" } else { "OFF" }
-        Log-Skjoldr ("{0} ({1}) -> In: {2} | Out: {3}" -f `
-            $_.Name.PadRight(12), $s, $_.DefaultInboundAction, $_.DefaultOutboundAction)
-    }
-    Log-Skjoldr "===================="
-}
-
-# Detect current shield mode
-function Get-SkjoldrMode {
-    $p = Get-NetFirewallProfile
-    $in  = $p.DefaultInboundAction  | Select-Object -Unique
-    $out = $p.DefaultOutboundAction | Select-Object -Unique
-    $fortRules = Get-NetFirewallRule -DisplayName "SKJOLDR-Allow-*" -ErrorAction SilentlyContinue
-
-    $allInBlock  = $in.Count  -eq 1 -and $in  -eq "Block"
-    $allOutAllow = $out.Count -eq 1 -and $out -eq "Allow"
-    $allOutBlock = $out.Count -eq 1 -and $out -eq "Block"
-
-    if ($allInBlock -and $allOutAllow) { return "Conservative" }
-    if ($allInBlock -and $allOutBlock -and $fortRules) { return "FORTRESS" }
-    return "Mortal / Unknown"
-}
-
-# Button actions
-$btnCons.Add_Click({
-    Log-Skjoldr "Applying Conservative Mode..."
-    try {
-        Apply-ConservativeMode
-        Log-Skjoldr "Conservative shield raised."
-        $mode.Text = "Active Shield: Conservative"
-        $mode.ForeColor = Hex "#64FF64"
-    } catch {
-        Log-Skjoldr "ERROR: $_"
-    }
-    Show-Profiles
-})
-
-$btnFort.Add_Click({
-    $confirm = [System.Windows.Forms.MessageBox]::Show(
-        "FORTRESS MODE = TOTAL ISOLATION`n`nAll paths sealed. No exceptions.`n`nAre you certain, Sovereign?",
-        "ENGAGE FORTRESS",
-        [System.Windows.Forms.MessageBoxButtons]::YesNo,
-        [System.Windows.Forms.MessageBoxIcon]::Warning
-    )
-    if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {
-        Log-Skjoldr "FORTRESS PROTOCOL ENGAGED."
-        try {
-            Apply-FortressMode
-            Log-Skjoldr "FORTRESS ACTIVE - WORLD SEALED."
-            $mode.Text = "Active Shield: FORTRESS"
-            $mode.ForeColor = Hex "#FF5050"
-            [System.Media.SystemSounds]::Hand.Play()
-        } catch {
-            Log-Skjoldr "FORTRESS FAILURE: $_"
-        }
-        Show-Profiles
-    }
-})
-
-$btnReset.Add_Click({
-    $confirm = [System.Windows.Forms.MessageBox]::Show(
-        "Burn all custom rules and reset Windows Firewall to defaults?",
-        "Reset Shield",
-        [System.Windows.Forms.MessageBoxButtons]::YesNo,
-        [System.Windows.Forms.MessageBoxIcon]::Warning
-    )
-    if ($confirm -eq [System.Windows.Forms.DialogResult]::Yes) {
-        Log-Skjoldr "Burning all runes..."
-        try {
-            Reset-FirewallDefaults
-            Log-Skjoldr "Returned to mortal state."
-            $mode.Text = "Active Shield: Mortal"
-            $mode.ForeColor = Hex "#FFB640"
-        } catch {
-            Log-Skjoldr "RESET FAILED: $_"
-        }
-        Show-Profiles
-    }
-})
-
-$btnRefresh.Add_Click({
-    Show-Profiles
-})
-
-# Add controls to form
-$form.Controls.Add($header)
-$form.Controls.Add($sub)
-$form.Controls.Add($mode)
-$form.Controls.Add($log)
-$form.Controls.Add($footer)
-$form.Controls.Add($btnCons)
-$form.Controls.Add($btnFort)
+$btnReset.Text = "Reset (Remove SKJOLDR rules + defaults)"
+$btnReset.Size = New-Object System.Drawing.Size(380, 40)
+$btnReset.Location = New-Object System.Drawing.Point(16, 146)
+$btnReset.Font = $font
 $form.Controls.Add($btnReset)
-$form.Controls.Add($btnRefresh)
 
-# Awakening
-Log-Skjoldr "Skjoldr awakens - first-born of Aurenyx."
-$mode.Text = "Active Shield: $(Get-SkjoldrMode)"
-Show-Profiles
+$btnStatus = New-Object System.Windows.Forms.Button
+$btnStatus.Text = "Refresh Status"
+$btnStatus.Size = New-Object System.Drawing.Size(180, 40)
+$btnStatus.Location = New-Object System.Drawing.Point(416, 50)
+$btnStatus.Font = $font
+$form.Controls.Add($btnStatus)
 
+$btnCopy = New-Object System.Windows.Forms.Button
+$btnCopy.Text = "Copy Status"
+$btnCopy.Size = New-Object System.Drawing.Size(180, 40)
+$btnCopy.Location = New-Object System.Drawing.Point(416, 98)
+$btnCopy.Font = $font
+$form.Controls.Add($btnCopy)
+
+$controls = $form.Controls
+foreach ($c in $controls) {
+    if ($c -is [System.Windows.Forms.Button]) {
+        $c.BackColor = [System.Drawing.Color]::FromArgb(45,45,48)
+        $c.ForeColor = [System.Drawing.Color]::Gainsboro
+        $c.FlatStyle = "Flat"
+    }
+}
+
+
+$txt = New-Object System.Windows.Forms.TextBox
+$txt.Multiline = $true
+$txt.ScrollBars = "Vertical"
+$txt.ReadOnly = $true
+$txt.Font = New-Object System.Drawing.Font("Consolas", 10)
+$txt.Location = New-Object System.Drawing.Point(16, 210)
+$txt.Size = New-Object System.Drawing.Size(812, 330)
+
+$txt.BackColor = [System.Drawing.Color]::FromArgb(20,20,20)
+$txt.ForeColor = [System.Drawing.Color]::Gainsboro
+$txt.BorderStyle = "FixedSingle"
+
+$form.Controls.Add($txt)
+
+function Write-Status {
+    try {
+        $s = Get-SkjoldrStatus
+        $lines = @()
+        $lines += "=== SKJOLDR STATUS ==="
+        $lines += "Time: " + (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        $lines += "ModeGuess: " + $s.ModeGuess
+        $lines += ""
+
+        $lines += "=== Profiles ==="
+        foreach ($p in $s.Profiles) {
+            $lines += ("{0,-7} In:{1,-5} Out:{2,-5} LogA:{3,-5} LogB:{4,-5}" -f $p.Name,$p.DefaultInboundAction,$p.DefaultOutboundAction,$p.LogAllowed,$p.LogBlocked)
+        }
+        $lines += ""
+
+        $lines += ("=== SKJOLDR Rules ({0}) ===" -f $s.RuleCount)
+        foreach ($r in $s.Rules) {
+            $lines += ("{0} | {1} {2} | Enabled:{3} | Group:{4}" -f $r.DisplayName,$r.Direction,$r.Action,$r.Enabled,$r.Group)
+        }
+
+        $txt.Text = ($lines -join "`r`n")
+    } catch {
+        $txt.Text = "STATUS ERROR:`r`n" + $_.Exception.Message
+    }
+}
+
+function Run-Action($actionName, [scriptblock]$sb) {
+    $form.UseWaitCursor = $true
+    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+    try {
+        & $sb
+        [System.Windows.Forms.MessageBox]::Show("$actionName complete.", "Skjoldr", "OK", "Information") | Out-Null
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show(($_.Exception.Message), "Skjoldr ERROR", "OK", "Error") | Out-Null
+    } finally {
+        $form.UseWaitCursor = $false
+        $form.Cursor = [System.Windows.Forms.Cursors]::Default
+        Write-Status
+    }
+}
+
+$btnCon.Add_Click({ Run-Action "Conservative mode" { Apply-ConservativeMode } })
+$btnFor.Add_Click({ Run-Action "Fortress mode"      { Apply-FortressMode } })
+$btnReset.Add_Click({
+    $res = [System.Windows.Forms.MessageBox]::Show(
+        "Reset removes all SKJOLDR rules and restores defaults. Continue?",
+        "Confirm Reset",
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Warning
+    )
+    if ($res -eq [System.Windows.Forms.DialogResult]::Yes) {
+        Run-Action "Reset" { Reset-SkjoldrFirewall }
+    }
+})
+$btnStatus.Add_Click({ Write-Status })
+$btnCopy.Add_Click({
+    try {
+        [System.Windows.Forms.Clipboard]::SetText($txt.Text)
+        [System.Windows.Forms.MessageBox]::Show("Status copied to clipboard.", "Skjoldr", "OK", "Information") | Out-Null
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Clipboard copy failed: " + $_.Exception.Message, "Skjoldr ERROR", "OK", "Error") | Out-Null
+    }
+})
+
+# Initial status
+Write-Status
+
+# Show form
 [void]$form.ShowDialog()

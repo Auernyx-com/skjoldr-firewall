@@ -1,142 +1,75 @@
-# Skjoldr Firewall  
-A lightweight, three-mode Windows Firewall controller with a clean PowerShell GUI.
+# Skjoldr Firewall
+**A lightweight, paranoid-grade Windows Firewall controller**  
+*“The shield they should have given you.”*
 
-> **“The shield they should have given you.”**
-
----
-
-## 🛡️ Features
-
-### **Conservative Mode**
-- Enables Domain / Private / Public profiles  
-- Blocks *all inbound* traffic  
-- Allows outbound traffic  
-- Disables unsolicited listening notifications  
-- Enables logging for allowed and blocked connections  
-
-### **Fortress Mode**
-- Enables all profiles  
-- Blocks **both inbound and outbound**  
-- Provides near-total network isolation  
-- Creates minimal outbound allow rules for essential apps (configurable)
-
-### **Reset to Defaults**
-- Restores Windows Firewall to factory settings  
-- Removes all `SKJOLDR-*` rules  
-
-### **Status View**
-- Shows:  
-  - Profile state  
-  - Default inbound action  
-  - Default outbound action  
+[![Version](https://img.shields.io/badge/version-1.1.0--dev-blue)]() [![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-0072C6?logo=powershell)]()
 
 ---
 
-## 📁 File Overview
+### Features
 
-### **`SkjoldrGUI.ps1`**
-Graphical interface using Windows Forms.  
-Handles:
-- Mode selection  
-- Live log window  
-- Active shield indicators  
+| Mode             | Inbound           | Outbound                  | Use Case                           |
+|------------------|-------------------|---------------------------|------------------------------------|
+| **Conservative** | Blocked           | Allowed (essential ports) | Daily driver, secure browsing      |
+| **Fortress**     | Blocked           | Only DNS + HTTPS + NTP    | Maximum isolation / threat hunting |
+| **Reset**        | Default (Allow)   | Default (Allow)           | Recovery / escape hatch            |
 
-### **`SkjoldrFirewall.ps1`**
-Core engine implementing:
-- `Set-ConservativeFirewall`
-- `Set-FortressFirewall`
-- `Reset-FirewallDefaults`
-- `Show-FirewallProfileStatus`
-
-And GUI integration functions:
-- `Apply-ConservativeMode`
-- `Apply-FortressMode`
-
-### **`README.md`**
-This file.
+- Modern dark GUI (Windows Forms)
+- One-click full forensic scan → `C:\ForensicDump`
+- No external dependencies
+- Runs entirely from `C:\Æsir\RUNTIME\skjoldr-firewall\`
 
 ---
 
-## 🧩 Requirements
-- Windows 10 or 11  
-- PowerShell 5.x+  
-- Admin privileges  
-- Execution policy allowing local scripts (`RemoteSigned` recommended)
+### File Structure
+C:\Æsir\RUNTIME\skjoldr-firewall
+├── SkjoldrGUI.ps1              ← Main graphical interface
+├── SkjoldrFirewall.ps1         ← Core firewall logic
+├── Start-Skjoldr.bat           ← Double-click launcher
+├── changelog.md
+├── roadmap.md
+└── scans
+└── Skjoldr_fullscan.ps1    ← Deep forensic collection script
+
 
 ---
 
-## 🚀 Installation
+### Installation & Usage
 
-1. Create the directory:
-   ```
-   C:\Projects\skjoldr-firewall
-   ```
+1. Create the folder:
+   ```powershell
+   New-Item -ItemType Directory -Path "C:\Æsir\RUNTIME\skjoldr-firewall" -Force
+   Drop all files into that folder (including the scans subfolder).
+   (Recommended) Unblock files:PowerShellGet-ChildItem "C:\Æsir\RUNTIME\skjoldr-firewall" -Recurse | Unblock-File
+   Launch — Double-click Start-Skjoldr.bat as AdministratorOr use this exact battle-tested batch file:
 
-2. Place these files inside:
-   - `SkjoldrGUI.ps1`
-   - `SkjoldrFirewall.ps1`
-   - `README.md`
+	@echo off
+	title Skjoldr Firewall - AEsir Edition
+	echo.
+	echo   Launching Skjoldr Firewall...
+	echo.
 
-3. Unblock scripts (if downloaded):
-   - Right-click file → **Properties**  
-   - Check **Unblock**  
+	powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0SkjoldrGUI.ps1"
 
----
+	if %errorlevel% equ 0 (
+   	 echo.
+    	echo   Skjoldr exited cleanly.
+	) else (
+    	echo.
+   	 echo   Error: Skjoldr encountered a problem (likely not run as admin).
+    	echo   Right-click Start-Skjoldr.bat - "Run as administrator"
+	)
 
-## ▶️ Usage
+	echo.
+	pause
 
-1. Open **PowerShell as Administrator**
-2. Navigate to the project:
-   ```
-   cd C:\Projects\skjoldr-firewall
-   ```
-3. Run Skjoldr:
-   ```
-   .\SkjoldrGUI.ps1
-   ```
+      Current Version
+      Skjoldr – Æsir Edition 1.1.0-dev
+      Built for those who refuse to bleed packets.
 
-### **Modes**
-#### Conservative
-- Blocks inbound  
-- Allows outbound  
-- Recommended for daily use  
+      Links
 
-#### Fortress
-- Blocks everything  
-- Use only when physically at the machine  
-- WILL break internet, apps, updates, remote access  
+      Changelog
+      Roadmap
+    
 
-#### Reset All
-- Restores default Windows Firewall  
-- Removes Skjoldr rules  
-
----
-
-## 📝 Troubleshooting
-
-### **“Apply-ConservativeMode not recognized”**
-Check:
-- Both scripts are in the same folder  
-- `SkjoldrGUI.ps1` includes:
-  ```powershell
-  $core = Join-Path $PSScriptRoot "SkjoldrFirewall.ps1"
-  . $core
-  ```
-- Execution policy:
-  ```powershell
-  Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-  ```
-
----
-
-## 🗺️ Roadmap
-- Per-profile configuration  
-- User-defined outbound allowlists  
-- Config export/import  
-- Optional notifications  
-
----
-
-## ⚠️ Disclaimer
-Skjoldr modifies firewall behavior.  
-Use with caution. Test before deploying in production.

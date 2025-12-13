@@ -1,20 +1,28 @@
-# Skjoldr Roadmap
+# Skjoldr Firewall – Roadmap
 
-## Upcoming Features
-- Outbound allowlist editor
-- Config import/export
-- Per-profile toggles
-- Log viewer with filters
-- Optional toast notifications
-- Silent mode for sysadmin deployment
+## Short Term (1.x Series)
 
-## Long-Term Ideas
-- EXE wrapper for GUI
-- MSI installer
-- Event log integration
-- Network profile auto-switching
+- **1.1.0** – Version Awareness  
+  → Version banner in GUI + CLI  
+  → Structured changelog & roadmap
 
-## Completed
-- v1.0.0 core modes
-- v1.0.0 GUI shell
-- v1.0.1 documentation cleanup
+- **1.2.x** – Visibility & Logging  
+  → Built-in log viewer in GUI  
+  → Export current firewall rules to file  
+  → Safer reset confirmation dialogs
+
+- **1.3.x** – Smart Presets  
+  → Profile-specific modes (Home / Public Wi-Fi / Travel)  
+  → App-based allow lists (browser, Steam, etc.)
+
+## Medium Term
+- Single-click EXE wrapper (no PowerShell dependency)
+- MSI installer + silent deployment support
+- JSON/YAML config import/export
+- Toast notifications on mode change
+
+## Long Term (2.x+)
+- Centralized logging & rule diff viewer
+- Multi-machine profile sync
+- Integration with Windows Event Log
+- Hardening templates per threat model
