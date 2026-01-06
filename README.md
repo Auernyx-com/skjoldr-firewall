@@ -74,6 +74,20 @@ C:\Æsir\RUNTIME\skjoldr-firewall
 
 ---
 
+## 2026-01-06: Corrections & Improvements
+- Fortress/Conservative modes are now idempotent and fully auditable
+- Added helpers: Remove-SkjoldrRuleByDisplayName, Ensure-SkjoldrRule
+- All rules managed by DisplayName for exact matching and safe updates
+- Fortress disables Windows HTTP/HTTPS punch-through rules and enforces explicit HTTP block
+- Conservative restores outbound allowances and re-enables Windows helper rules
+- Defensive error handling: receipts and live tests are wrapped, never break mode application
+- $global:SKJOLDR_GROUP is set once and used everywhere for group consistency
+- DNS server restriction and live DNS query tests in Fortress mode
+- Receipts/reporting logic is robust, group-agnostic, and does not depend on prior state
+- Bastion Gate adapter contract and logic verified: no breakage, fully compatible
+
+---
+
 # License
 
 This project is licensed under the Apache License, Version 2.0. See the LICENSE file for details.

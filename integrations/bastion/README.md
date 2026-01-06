@@ -1,5 +1,13 @@
 # Bastion-to-Skjoldr Gate Adapter
 
+---
+## 2026-01-06: Skjoldr Corrections & Bastion Compatibility
+- SkjoldrFirewall.ps1 modes (Fortress/Conservative) are now idempotent, auditable, and receipt-safe
+- All rule management is by DisplayName for exact matching
+- Bastion adapter contract and logic verified: no breakage, fully compatible with new Skjoldr logic
+- Emergency lockdown (FORTRESS) and verdict handling remain robust and unchanged
+---
+
 ## Contract
 - **ALLOW:** Skjoldr proceeds as normal.
 - **PAUSE:** Skjoldr does nothing, exits non-zero, no firewall changes. Requires human correction.
