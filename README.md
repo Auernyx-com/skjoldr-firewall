@@ -88,6 +88,14 @@ C:\Æsir\RUNTIME\skjoldr-firewall
 
 ---
 
+## 2026-01-06: Final Project Closure
+- All modes (Fortress/Conservative) and receipts verified
+- Bastion Gate adapter integration and error handling tested
+- End-of-day baseline checks complete: no issues
+- Hardened for governance, audit, and deterministic operation
+- Project closed and ready for release
+---
+
 # License
 
 This project is licensed under the Apache License, Version 2.0. See the LICENSE file for details.
