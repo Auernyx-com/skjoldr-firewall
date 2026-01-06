@@ -11,7 +11,7 @@ function Test-Admin {
     return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-function Relaunch-AsAdmin {
+function Start-SkjoldrAdminSession {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = "powershell.exe"
     $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
@@ -33,13 +33,13 @@ if (-not (Test-Path -LiteralPath $corePath)) {
 }
 
 # Require admin
-if (-not (Test-Admin)) { Relaunch-AsAdmin }
+if (-not (Test-Admin)) { Start-SkjoldrAdminSession }
 
 # Load core
 . $corePath
 
 # Verify core functions exist
-$required = @("Apply-ConservativeMode","Apply-FortressMode","Reset-SkjoldrFirewall","Get-SkjoldrStatus")
+$required = @("Set-SkjoldrConservativeMode","Set-SkjoldrFortressMode","Reset-SkjoldrFirewall","Get-SkjoldrStatus")
 $missing = @()
 foreach ($fn in $required) {
     if (-not (Get-Command $fn -ErrorAction SilentlyContinue)) { $missing += $fn }
@@ -158,14 +158,14 @@ function Write-Status {
     }
 }
 
-function Run-Action($actionName, [scriptblock]$sb) {
+function Invoke-ActionWithStatus($actionName, [scriptblock]$sb) {
     $form.UseWaitCursor = $true
     $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
     try {
         & $sb
-        [System.Windows.Forms.MessageBox]::Show("$actionName complete.", "Skjoldr", "OK", "Information") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show("$actionName complete.", "Skjoldr", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
     } catch {
-        [System.Windows.Forms.MessageBox]::Show(($_.Exception.Message), "Skjoldr ERROR", "OK", "Error") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Skjoldr ERROR", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
     } finally {
         $form.UseWaitCursor = $false
         $form.Cursor = [System.Windows.Forms.Cursors]::Default
@@ -173,8 +173,10 @@ function Run-Action($actionName, [scriptblock]$sb) {
     }
 }
 
-$btnCon.Add_Click({ Run-Action "Conservative mode" { Apply-ConservativeMode } })
-$btnFor.Add_Click({ Run-Action "Fortress mode"      { Apply-FortressMode } })
+
+# Button event handlers (all use approved verbs)
+$btnCon.Add_Click({ Invoke-ActionWithStatus "Conservative mode" { Set-SkjoldrConservativeMode } })
+$btnFor.Add_Click({ Invoke-ActionWithStatus "Fortress mode"      { Set-SkjoldrFortressMode } })
 $btnReset.Add_Click({
     $res = [System.Windows.Forms.MessageBox]::Show(
         "Reset removes all SKJOLDR rules and restores defaults. Continue?",
@@ -183,7 +185,7 @@ $btnReset.Add_Click({
         [System.Windows.Forms.MessageBoxIcon]::Warning
     )
     if ($res -eq [System.Windows.Forms.DialogResult]::Yes) {
-        Run-Action "Reset" { Reset-SkjoldrFirewall }
+        Invoke-ActionWithStatus "Reset" { Reset-SkjoldrFirewall }
     }
 })
 $btnStatus.Add_Click({ Write-Status })

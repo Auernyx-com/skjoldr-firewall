@@ -71,5 +71,32 @@ C:\Æsir\RUNTIME\skjoldr-firewall
 
       Changelog
       Roadmap
-    
+
+---
+
+# License
+
+This project is licensed under the Apache License, Version 2.0. See the LICENSE file for details.
+
+# Governance and Enforcement
+
+This project implements governance and enforcement tooling.
+Runtime artifacts (decisions, receipts, ledgers) are intentionally excluded from version control.
+
+# Bastion Integration Contract
+
+- **ALLOW:** Skjoldr proceeds as normal.
+- **PAUSE:** Skjoldr does nothing, exits non-zero, no firewall changes. Requires human correction.
+- **DENY/unknown/missing:** Skjoldr refuses, logs, exits hard.
+- **Emergency lockdown:** Only via SKJOLDR_EMERGENCY=FORTRESS or explicit operator command, never implicit.
+
+# Usage
+- Use the Bastion adapter: `integrations/bastion/Invoke-BastionGate.ps1`
+- To force lockdown: set `SKJOLDR_EMERGENCY=FORTRESS` in the environment.
+
+# Governance
+- The Bastion→Skjoldr interface is locked. Changes require explicit review.
+- No implicit escalation from PAUSE to lockdown.
+- Auditable, fail-closed, and human-bound.
+
 

@@ -1,6 +1,36 @@
-# Windows junk
-Thumbs.db
-desktop.ini
+# Runtime outputs
+/out/
+/output/
+/artifacts/
+/receipts/
+/ledger/
+/*.jsonl
+
+# Bastion / Skjoldr generated files
+decision.json
+receipt.json
+baseline-pre.json
+baseline-post.json
 
 # Logs
 *.log
+*.trace
+*.tmp
+
+# PowerShell noise
+*.ps1.xml
+*.clixml
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor junk
+.vscode/
+.idea/
+
+# Secrets (even test ones)
+*.env
+*.key
+*.pem
+*.pfx
