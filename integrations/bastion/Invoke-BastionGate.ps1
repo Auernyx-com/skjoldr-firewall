@@ -10,6 +10,11 @@ param(
     [string[]]$SkjoldrArgs
 )
 
+    # Early guard: ensure Skjoldr path is valid
+    if (-not (Test-Path $Skjoldr -PathType Leaf)) {
+        throw "[BASTION] Skjoldr path invalid or not found: $Skjoldr"
+    }
+
 if (-not (Test-Path -LiteralPath $Decision)) {
     Write-Error "Decision file not found: $Decision"
     exit 2
