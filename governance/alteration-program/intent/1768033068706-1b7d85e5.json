@@ -1,0 +1,31 @@
+{
+  "intentId": "1768033068706-1b7d85e5",
+  "title": "Adopt Mk2 Alteration Program into skjoldr-firewall",
+  "system": "skjoldr-firewall",
+  "changeClass": "trunk",
+  "scope": {
+    "in": [
+      "CI gate + schema + PR template"
+    ],
+    "out": [
+      "runtime behavior"
+    ]
+  },
+  "riskClass": "low",
+  "governanceImpact": false,
+  "actorId": "jhugh",
+  "createdAt": "2026-01-10T08:17:48.706773Z",
+  "status": "draft",
+  "verification": {
+    "plan": "Run project verify battery; attach receipts if required.",
+    "requiredChecks": [
+      "mk2-alteration-gate"
+    ]
+  },
+  "evidence": {
+    "required": false,
+    "receiptRefs": [],
+    "notes": ""
+  },
+  "amendments": []
+}
