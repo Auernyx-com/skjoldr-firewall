@@ -5,13 +5,24 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def run(cmd, cwd: Path | None = None):
-    p = subprocess.run(cmd, cwd=str(cwd) if cwd else None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # Git on Windows emits UTF-8 by default; force UTF-8 decoding so Unicode paths don't corrupt.
+    p = subprocess.run(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     if p.returncode != 0:
         raise SystemExit(f"Command failed: {' '.join(cmd)}\n{p.stderr.strip()}")
     return p.stdout
 
 def git_root() -> Path:
-    out = run(["git", "-C", str(REPO_ROOT), "rev-parse", "--show-toplevel"]).strip()
+    # NOTE: avoid `git -C <path>` because passing Unicode paths on Windows can mis-encode.
+    # Using subprocess `cwd=` is more reliable.
+    out = run(["git", "rev-parse", "--show-toplevel"], cwd=REPO_ROOT).strip()
     return Path(out)
 
 def repo_prefix(groot: Path) -> str:
@@ -40,16 +51,16 @@ def load_json(path):
         return json.load(f)
 
 def get_changed_files(base_ref):
-    diff = run(["git", "-C", str(GIT_ROOT), "diff", "--name-only", f"{base_ref}...HEAD"])
+    diff = run(["git", "diff", "--name-only", f"{base_ref}...HEAD"], cwd=GIT_ROOT)
     return [f.strip() for f in diff.splitlines() if f.strip()]
 
 def get_working_files():
-    staged = run(["git", "-C", str(GIT_ROOT), "diff", "--name-only", "--cached"])
+    staged = run(["git", "diff", "--name-only", "--cached"], cwd=GIT_ROOT)
     staged_files = [f.strip() for f in staged.splitlines() if f.strip()]
     if staged_files:
         return staged_files, "staged"
 
-    wt = run(["git", "-C", str(GIT_ROOT), "diff", "--name-only"])
+    wt = run(["git", "diff", "--name-only"], cwd=GIT_ROOT)
     wt_files = [f.strip() for f in wt.splitlines() if f.strip()]
     return wt_files, "working"
 
@@ -115,12 +126,12 @@ def assert_append_only_trace_files(changed_files: list[str], base_ref: str | Non
         new_bytes = normalize_newlines(new_path.read_bytes())
         if base_ref:
             try:
-                base_text = run(["git", "-C", str(GIT_ROOT), "show", f"{base_ref}:{rel_norm}"])
+                base_text = run(["git", "show", f"{base_ref}:{rel_norm}"], cwd=GIT_ROOT)
             except Exception:
                 base_text = ""
         else:
             try:
-                base_text = run(["git", "-C", str(GIT_ROOT), "show", f"HEAD:{rel_norm}"])
+                base_text = run(["git", "show", f"HEAD:{rel_norm}"], cwd=GIT_ROOT)
             except Exception:
                 base_text = ""
 
@@ -166,7 +177,7 @@ def main():
     # if closed intent existed at base, modifications require a new amendment entry
     if allow_closed_intent_check:
         try:
-            base_blob = run(["git", "-C", str(GIT_ROOT), "show", f"{base_ref}:{intent_path}"])
+            base_blob = run(["git", "show", f"{base_ref}:{intent_path}"], cwd=GIT_ROOT)
             base_intent = json.loads(base_blob)
             if base_intent.get("status") == "closed":
                 base_am = base_intent.get("amendments", []) or []
