@@ -17,6 +17,13 @@ baseline-post.json
 *.trace
 *.tmp
 
+# Python runtime noise
+__pycache__/
+**/__pycache__/
+
+# Local test artifacts
+test-decision.json
+
 # PowerShell noise
 *.ps1.xml
 *.clixml
