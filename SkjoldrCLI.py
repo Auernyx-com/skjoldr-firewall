@@ -16,6 +16,29 @@ Verbs:
     apply --profile <name>          Apply a named profile (conservative | fortress | reset)
     apply --file <path>             Apply a ruleset file (.json)
     restore --snapshot <path>       Restore from an exported baseline snapshot
+    lockdown                        Hard stop: radio kill (rfkill) + link-down + zero-exception
+                                     firewall. Short of pulling power. See "lockdown vs fortress"
+                                     below before ever invoking this for real.
+    unlock                          Reverse a lockdown: unblock radios, bring links back up,
+                                     restore firewall to the pre-Skjoldr/conservative baseline.
+
+Lockdown vs fortress — these solve different problems:
+  fortress is PORT-based and lets ANY process still reach dns/https/ntp. Most real
+  C2/exfil rides exactly those ports, so fortress does NOT reliably stop a competent
+  live compromise — it's containment/triage, not a hard stop. This was flagged
+  directly (2026-08-30): "what is the point to a hardstop fire wall if it dosnt
+  stop when needed?" — fair, and fortress alone isn't it.
+  lockdown is a HARDWARE + zero-exception hard stop: rfkill block on wifi/bluetooth
+  (kills the radio itself — no process, port, or protocol can transmit through a
+  blocked radio) plus best-effort `ip link set down` on every interface plus a
+  firewall policy with NO service exceptions at all (not even dns/https/ntp).
+  Use lockdown when you mean "cut this box off from every network, right now,"
+  short of physically pulling power — and unlike pulling power, Feneris keeps
+  running and logging throughout (it makes no outbound calls of its own).
+  CAVEAT: this also cuts off the very session invoking it (SSH, or any agent like
+  Claude Code that needs its own network access) — `unlock` is a purely local
+  operation (no network needed to run it), so recovery just requires a local
+  terminal on this machine, not another device.
 
 Options:
     --json                          Output JSON envelope { ok, data } or { ok, error_code, message }
@@ -82,6 +105,7 @@ policy decisions — same as the Windows version.
 
 import hashlib
 import json
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -94,11 +118,14 @@ except ImportError:
 
 SNAPSHOT_SCHEMA = "v1-linux"
 FORTRESS_POLICY_NAME = "skjoldr-fortress"
+LOCKDOWN_POLICY_NAME = "skjoldr-lockdown"
 BLOCK_TARGET = "DROP"  # silent discard — matches Windows "Block", not %%REJECT%%
 ESSENTIAL_OUTBOUND_SERVICES = ["dns", "https", "ntp"]
+LOCKDOWN_RADIOS = ["wifi", "bluetooth"]
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SNAPSHOT_DIR = SCRIPT_DIR / "skjoldr-snapshots"
+LOCKDOWN_LOG = SNAPSHOT_DIR / "lockdown-events.log"
 
 # ── Arg parsing (mirrors SkjoldrCLI.ps1 exactly) ─────────────────────────────
 
@@ -579,6 +606,149 @@ def invoke_restore(fc) -> None:
     })
 
 
+# ── Lockdown helpers (rfkill/ip are separate from firewalld's D-Bus API) ────────
+
+def _run(cmd: list[str]) -> tuple[int, str, str]:
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+    except FileNotFoundError as e:
+        return 127, "", str(e)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timeout running: {' '.join(cmd)}"
+
+
+def list_links() -> list[dict]:
+    """All non-loopback interfaces via `ip -j link show` — works without root."""
+    rc, out, _err = _run(["ip", "-j", "link", "show"])
+    if rc != 0 or not out:
+        return []
+    return [link for link in json.loads(out) if link.get("ifname") != "lo"]
+
+
+def append_lockdown_log(event: dict) -> None:
+    SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    with LOCKDOWN_LOG.open("a") as f:
+        f.write(json.dumps(event) + "\n")
+
+
+# ── Verb: lockdown ───────────────────────────────────────────────────────────
+
+def invoke_lockdown(fc) -> None:
+    if dry_run:
+        up_links = [link.get("ifname") for link in list_links() if "UP" in (link.get("flags") or [])]
+        write_ok({
+            "dry_run": True,
+            "planned_action": (
+                "rfkill block on " + ", ".join(LOCKDOWN_RADIOS) + " (hardware radio kill); "
+                "best-effort `ip link set down` on every UP non-loopback interface; "
+                "firewall policy with ZERO outbound exceptions (no dns/https/ntp, unlike fortress)"
+            ),
+            "would_affect_interfaces": up_links,
+        })
+        return
+
+    pre_rfkill = _run(["rfkill", "list"])[1]
+
+    rfkill_results = {}
+    for radio in LOCKDOWN_RADIOS:
+        rc, out, err = _run(["rfkill", "block", radio])
+        rfkill_results[radio] = "blocked" if rc == 0 else f"failed: {err or out}"
+
+    link_results = {}
+    for link in list_links():
+        ifname = link.get("ifname")
+        if "UP" not in (link.get("flags") or []):
+            continue
+        rc, out, err = _run(["ip", "link", "set", ifname, "down"])
+        link_results[ifname] = "down" if rc == 0 else f"failed (likely needs root): {err or out}"
+
+    for zone in get_active_zones(fc):
+        ensure_auto_backup(fc, zone)
+        data = get_zone_data(fc, zone)
+        apply_zone_settings(fc, zone, BLOCK_TARGET, [], [], [],
+                             data["forward"], False, rich_rules=[])
+    set_log_denied(fc, "all")
+
+    cfg = _config(fc)
+    settings = fwclient.FirewallClientPolicySettings()
+    settings.setIngressZones(["HOST"])
+    settings.setEgressZones(["ANY"])
+    settings.setTarget(BLOCK_TARGET)
+    # No addService() calls, deliberately — zero exceptions, unlike fortress's
+    # dns/https/ntp allowance. This is the whole point of this verb.
+    if LOCKDOWN_POLICY_NAME in cfg.getPolicyNames():
+        cfg.getPolicyByName(LOCKDOWN_POLICY_NAME).update(settings)
+    else:
+        cfg.addPolicy(LOCKDOWN_POLICY_NAME, settings)
+    fc.reload()
+
+    append_lockdown_log({
+        "event": "lockdown",
+        "at": datetime.now(timezone.utc).isoformat(),
+        "rfkill_before": pre_rfkill,
+        "rfkill_actions": rfkill_results,
+        "link_actions": link_results,
+    })
+
+    write_ok({
+        "locked_down": True,
+        "rfkill": rfkill_results,
+        "links": link_results,
+        "note": "Radios are the primary hard stop (no process/port/protocol transmits through "
+                "a blocked radio); the zero-exception firewall policy is defense-in-depth in "
+                "case a radio gets unblocked by something else. Feneris keeps running — it "
+                "makes no outbound calls of its own. Run `unlock` (local-only, no network "
+                "needed) to reverse.",
+    })
+
+
+# ── Verb: unlock ─────────────────────────────────────────────────────────────
+
+def invoke_unlock(fc) -> None:
+    if dry_run:
+        write_ok({
+            "dry_run": True,
+            "planned_action": (
+                "rfkill unblock on " + ", ".join(LOCKDOWN_RADIOS) + "; `ip link set up` on every "
+                "interface; remove the lockdown policy object; restore firewall from Skjoldr's "
+                "auto-backup (same as apply --profile reset)"
+            ),
+        })
+        return
+
+    rfkill_results = {}
+    for radio in LOCKDOWN_RADIOS:
+        rc, out, err = _run(["rfkill", "unblock", radio])
+        rfkill_results[radio] = "unblocked" if rc == 0 else f"failed: {err or out}"
+
+    link_results = {}
+    for link in list_links():
+        ifname = link.get("ifname")
+        rc, out, err = _run(["ip", "link", "set", ifname, "up"])
+        link_results[ifname] = "up" if rc == 0 else f"failed (likely needs root): {err or out}"
+
+    cfg = _config(fc)
+    if LOCKDOWN_POLICY_NAME in cfg.getPolicyNames():
+        cfg.getPolicyByName(LOCKDOWN_POLICY_NAME).remove()
+
+    restored = apply_reset_profile(fc)
+
+    append_lockdown_log({
+        "event": "unlock",
+        "at": datetime.now(timezone.utc).isoformat(),
+        "rfkill_actions": rfkill_results,
+        "link_actions": link_results,
+    })
+
+    write_ok({
+        "unlocked": True,
+        "rfkill": rfkill_results,
+        "links": link_results,
+        "restored_from": restored,
+    })
+
+
 # ── Dispatch ─────────────────────────────────────────────────────────────────
 
 def main() -> int:
@@ -592,8 +762,13 @@ def main() -> int:
             invoke_apply(fc)
         elif verb == "restore":
             invoke_restore(fc)
+        elif verb == "lockdown":
+            invoke_lockdown(fc)
+        elif verb == "unlock":
+            invoke_unlock(fc)
         else:
-            write_fail("unknown_verb", f"Unknown verb: '{verb}'. Expected: status | export | apply | restore")
+            write_fail("unknown_verb",
+                       f"Unknown verb: '{verb}'. Expected: status | export | apply | restore | lockdown | unlock")
             return 1
         return 0
     except SkjoldrError as e:
