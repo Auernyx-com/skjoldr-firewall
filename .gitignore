@@ -4,3 +4,7 @@ desktop.ini
 
 # Logs
 *.log
+
+# Runtime output (Fedora port)
+__pycache__/
+skjoldr-snapshots/
