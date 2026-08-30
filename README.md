@@ -28,8 +28,13 @@ Both modes use the same underlying firewall operations. The GUI is for humans at
 ### Fortress Mode
 - Enables all profiles
 - Blocks both inbound and outbound
-- Near-total network isolation
-- Creates minimal essential outbound exceptions (configurable)
+- Creates minimal essential outbound exceptions (dns/https/ntp by default)
+- **Not a hard stop.** This is a *port-based* allowlist, not per-process: any
+  program on the box can still use the dns/https/ntp exceptions, and most
+  real-world C2/exfil traffic rides exactly those ports on purpose because
+  they're almost always open. Fortress is containment/triage for naive or
+  unusual traffic, not a guarantee against a live, competent compromise.
+  If you need an actual hard stop, see **Lockdown Mode** below (Linux port only).
 
 ### Reset to Defaults
 - Restores Windows Firewall to factory settings
@@ -72,6 +77,55 @@ See [Avars Integration](#avars--auernyx-mk2-integration) below.
 
 ---
 
+## Linux / Fedora Port (`SkjoldrCLI.py`)
+
+A Python port of the CLI exists for Fedora/firewalld hosts — same 4-verb
+contract and JSON envelope as `SkjoldrCLI.ps1`, so Mk2's `skjoldrFirewall.ts`
+needs no code changes, only `addons.skjoldrFirewall.command` repointed at
+this file instead of the `.ps1`. Uses firewalld's Python D-Bus client
+(`firewall.client`), not scraped `firewall-cmd` text output.
+
+**Requirements:** Fedora with `firewalld` + `python3-firewall` installed.
+No sudo needed for `status`/`export`/`apply`/`restore` (desktop polkit
+grants the active user firewalld management); `rfkill` operations in
+`lockdown`/`unlock` also work without sudo via this host's `/dev/rfkill`
+ACL — verify that holds on any new box before assuming it.
+
+**Platform differences from the Windows version** — read before assuming parity:
+- Windows' 3 fixed profiles (Domain/Private/Public) → whatever zone(s) are
+  currently active on this box's interfaces (usually one)
+- `fortress`'s "block all outbound except essentials" is approximated with a
+  firewalld POLICY object, since nftables/firewalld has no per-executable
+  outbound primitive like Windows' WFP (`-Program`) — see the Fortress Mode
+  caveat above
+- `apply --file` rules with `program` set (Windows per-exe rules) are reported
+  **skipped** with an explicit reason, never silently dropped
+- Snapshots are schema-tagged `v1-linux`, so a Windows snapshot can never be
+  fed into `restore` here or vice versa — refused by construction
+
+### Lockdown Mode (Linux port only — no Windows equivalent)
+
+Two extra verbs not present in `SkjoldrCLI.ps1`, added to answer a real gap:
+fortress's port-based allowlist means it does **not** reliably stop a live
+compromise, since most real C2/exfil traffic rides the same dns/https/ntp
+ports fortress leaves open. Lockdown is the actual hard stop:
+
+- **`lockdown`** — `rfkill block` on wifi + bluetooth (hardware/firmware-level;
+  no process, port, or protocol can transmit through a blocked radio),
+  best-effort `ip link set down` on every interface, and a firewall policy
+  with **zero** service exceptions (not even dns/https/ntp, unlike fortress).
+  Short of pulling power — and unlike pulling power, the host keeps running,
+  so anything logging locally (e.g. Feneris) keeps working throughout.
+- **`unlock`** — reverses all three layers. Needs no network to run, so
+  recovery only requires local terminal access, never a second device.
+- Every lockdown/unlock event is appended to `skjoldr-snapshots/lockdown-events.log`.
+- **Caveat:** this also cuts off whatever invoked it — an SSH session, or an
+  agent that needs its own network access (e.g. Claude Code reaching its API)
+  — has no way to keep working through its own lockdown call. Trigger it
+  knowing that, not as a background action.
+
+---
+
 ## Installation
 
 1. Clone or download to a local directory:
@@ -108,7 +162,7 @@ See [Avars Integration](#avars--auernyx-mk2-integration) below.
 ### Modes
 **Conservative** — Blocks inbound, allows outbound. Recommended for daily use.
 
-**Fortress** — Blocks everything. Use only when physically at the machine. Will break internet, apps, updates, and remote access.
+**Fortress** — Blocks everything except dns/https/ntp (port-based, not per-process — see caveat above). Use only when physically at the machine. Will break internet, apps, updates, and remote access.
 
 **Reset All** — Restores default Windows Firewall settings and removes all Skjoldr-managed rules.
 
@@ -145,6 +199,8 @@ Mk2 auto-detects `SkjoldrCLI.ps1` in the configured path. No `command` override 
 | `skjoldrFirewallApplyRulesetFile` | `apply --file <path> --json` |
 | `skjoldrFirewallRestoreBaseline` | `restore --snapshot <path> --json` |
 | `skjoldrFirewallAdviseInboundRuleSets` | `status --json` (read basis for advice) |
+| *(Linux port only)* lockdown | `lockdown --json` |
+| *(Linux port only)* unlock | `unlock --json` |
 
 All write operations go through Mk2's Tier 2 approval flow before the CLI is called — the daemon enforces governance, Skjoldr executes the approved action.
 
