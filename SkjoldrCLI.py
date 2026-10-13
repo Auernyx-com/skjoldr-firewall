@@ -88,10 +88,16 @@ version, "program" included for schema compatibility but unsupported here:
           "protocol": "TCP",
           "localPort": "22",
           "program": "",               // unsupported on Linux — rule skipped if set
+          "remoteMac": "",             // optional, Linux-only: inbound allow from this MAC only
           "enabled": true
         }
       ]
     }
+
+"remoteMac" turns an inbound allow into a rich rule scoped to one source MAC
+instead of a zone-wide open port. Use it for LAN-only traffic from a known
+device (e.g. mDNS from a printer): a MAC never crosses a router, so the rule
+can't be matched from off-LAN over IPv4 or IPv6.
 
 Snapshot files are written to ./skjoldr-snapshots/ relative to this script.
 Schema is tagged "v1-linux" (not "v1") so a Windows snapshot can never be
@@ -105,6 +111,7 @@ policy decisions — same as the Windows version.
 
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -121,6 +128,7 @@ FORTRESS_POLICY_NAME = "skjoldr-fortress"
 LOCKDOWN_POLICY_NAME = "skjoldr-lockdown"
 BLOCK_TARGET = "DROP"  # silent discard — matches Windows "Block", not %%REJECT%%
 ESSENTIAL_OUTBOUND_SERVICES = ["dns", "https", "ntp"]
+MAC_RE = re.compile(r"[0-9a-f]{2}(:[0-9a-f]{2}){5}")
 LOCKDOWN_RADIOS = ["wifi", "bluetooth"]
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -522,6 +530,7 @@ def invoke_apply_file(fc) -> None:
             protocol = (rule.get("protocol") or "").lower()
             local_port = rule.get("localPort") or ""
             program = rule.get("program") or ""
+            remote_mac = (rule.get("remoteMac") or "").lower().strip()
 
             if not enabled:
                 skipped.append({"rule": name, "reason": "disabled"})
@@ -538,8 +547,23 @@ def invoke_apply_file(fc) -> None:
                 skipped.append({"rule": name, "reason": "protocol and localPort are required on this port"})
                 continue
 
+            if remote_mac and not MAC_RE.fullmatch(remote_mac):
+                skipped.append({"rule": name, "reason": f"invalid remoteMac: '{remote_mac}'"})
+                continue
+            if remote_mac and not (direction == "inbound" and action == "allow"):
+                skipped.append({"rule": name, "reason": "remoteMac is only supported on inbound allow rules"})
+                continue
+
             if direction == "inbound":
-                if action == "allow":
+                if action == "allow" and remote_mac:
+                    # Source-MAC-scoped allow. No family attribute, so it
+                    # covers IPv4 and IPv6 alike; a MAC only exists on the
+                    # local link, so nothing routed from off-LAN can match.
+                    settings.addRichRule(
+                        f'rule source mac="{remote_mac}" port port="{local_port}" '
+                        f'protocol="{protocol}" accept'
+                    )
+                elif action == "allow":
                     settings.addPort(local_port, protocol)
                 else:
                     settings.addRichRule(

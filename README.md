@@ -241,6 +241,8 @@ For `apply --file`, provide a JSON file:
 
 Both `profile` and `rules` are optional — include either, both, or neither (though neither is a no-op).
 
+**Linux only — `remoteMac`:** add `"remoteMac": "aa:bb:cc:dd:ee:ff"` to an inbound `allow` rule to accept that port only from one device's MAC address, instead of opening it zone-wide. It's applied as a firewalld rich rule with no address family, so it covers IPv4 and IPv6. MAC addresses don't cross routers, so nothing from off-LAN can match it. Invalid MACs, or `remoteMac` on any other kind of rule, are reported in `skipped` and not applied.
+
 ### Dry-run
 
 Add `--dry-run` to any write verb to preview what would happen without touching the firewall. Mk2 uses this as a preflight check before the governed apply.
